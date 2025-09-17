@@ -1,0 +1,10 @@
+{
+  "bot_token": "PUT_YOUR_BOT_TOKEN_HERE",
+  "password": "put_a_strong_password_here",
+  "admin_chat_id": null,
+  "heartbeat_min": 30,
+  "geofence_radius_m": 200,
+  "auto_update_github": true,
+  "github_repo": "https://github.com/master-pd/Advanced-AntiTheft-Bot.git",
+  "cloud_backup": false
+}
