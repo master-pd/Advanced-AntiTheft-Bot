@@ -1,0 +1,8 @@
+cd ~
+mkdir -p Advanced-AntiTheft-Bot && cd Advanced-AntiTheft-Bot
+# create the files above using nano or echo
+git init
+git add .
+git commit -m "Initial commit: Advanced Anti-Theft Bot"
+git remote add origin https://github.com/YOUR_USERNAME/Advanced-AntiTheft-Bot.git
+git push -u origin master
