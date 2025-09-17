@@ -1,0 +1,16 @@
+হাই! কেমন আছো?
+আমি ঠিক আছি, তুমি কেমন?
+তুমি কি বাড়িতে আছো?
+দয়া করে উত্তর দাও।
+এটা একটি টেস্ট মেসেজ।
+Device found — please respond.
+Low battery alert: Please charge your device.
+Movement detected near the device.
+Location requested — sending coordinates.
+Alarm triggered on device.
+Security alert: possible SIM change.
+Please contact me ASAP.
+This is an automatic security notification.
+Hello from your device — status OK.
+Phone last seen at {TIME}.
+Emergency! Please call me.
