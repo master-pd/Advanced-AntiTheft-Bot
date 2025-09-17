@@ -181,5 +181,3 @@ Auto-run & background mode নিশ্চিত করতে run_forever.sh ও
 
 ---
 
-✅ এই version-এ **সব step, config, messages, logs, file structure, author, license, tips একসাথে**।  
-তুমি শুধু copy করে GitHub-এ README.md বানাবে, আর সব ready। 
