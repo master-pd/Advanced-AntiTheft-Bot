@@ -1,0 +1,5 @@
+# সফল বার্তা লগ
+def log_success(msg):
+    with open("logs/Success_log.txt", "a", encoding="utf-8") as f:
+        f.write(f"{datetime.now().isoformat()} | SUCCESS | {msg}\n")
+        
