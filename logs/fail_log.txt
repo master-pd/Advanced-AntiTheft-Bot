@@ -1,0 +1,4 @@
+# ব্যর্থতা লগ
+def log_fail(msg, err):
+    with open("logs/Fail_log.txt", "a", encoding="utf-8") as f:
+        f.write(f"{datetime.now().isoformat()} | FAIL | {msg} | Error: {err}\n")
