@@ -148,6 +148,7 @@ Bot Token ও Admin Chat ID সঠিকভাবে বসাতে হবে�
 
 Termux 100% compatible, Python 3.12+ ব্যবহার করুন।
 
+
 Logs folder & files auto-create হয়, যদি না থাকে।
 
 
@@ -181,3 +182,86 @@ Auto-run & background mode নিশ্চিত করতে run_forever.sh ও
 
 ---
 
+
+
+
+
+
+## One Click copy past 
+
+Complete Command ✅⤵️
+
+# ==== BEGIN FULL ONE-CLICK ADVANCED-ANTITHEFT-BOT SETUP ====
+
+# 1️⃣ Termux update & packages
+pkg update -y && pkg upgrade -y
+pkg install -y python clang make openssl libffi git curl jq build-essential libcrypt-dev nano
+
+# 2️⃣ Python pip upgrade
+python -m pip install --upgrade pip setuptools wheel
+
+# 3️⃣ Fix problematic packages
+pip install --no-cache-dir cffi cryptography
+
+# 4️⃣ Clone Bot repo
+cd ~
+rm -rf Advanced-AntiTheft-Bot
+git clone https://github.com/master-pd/Advanced-AntiTheft-Bot.git || { echo "git clone failed"; exit 1; }
+cd Advanced-AntiTheft-Bot || { echo "cd failed"; exit 1; }
+
+# 5️⃣ Install requirements
+pip install --no-cache-dir -r requirements.txt || echo "Some packages failed, check logs"
+
+# 6️⃣ Create config.json
+cat <<'JSON' > config.json
+{
+  "bot_token": "8124079918:AAEsXKzx8Lxk2Qqo1gzOC2J5U7G3GuvH44g",
+  "admin_chat_id": "6454347745",
+  "password": "r4nA#T0p!9kLm2$Z"
+}
+JSON
+
+# 7️⃣ Create messages.txt
+cat <<'MSG' > messages.txt
+🔒 Device Security Alert!
+📍 Location request received.
+⚡ Power disconnected!
+🔋 Power connected!
+📶 SIM card changed!
+🚨 Unauthorized access detected!
+✅ Task completed successfully.
+❌ Task failed, please check logs.
+MSG
+
+# 8️⃣ Logs & permissions
+mkdir -p logs
+touch logs/Success_log.txt logs/Fail_log.txt
+chmod +x *.sh || true
+chmod +x main.py || true
+
+# 9️⃣ run_forever.sh (auto-restart)
+cat <<'SH' > run_forever.sh
+#!/data/data/com.termux/files/usr/bin/bash
+cd "$(dirname "$0")"
+while true; do
+  python main.py
+  echo "$(date "+%Y-%m-%d %H:%M:%S") - main.py exited with code $?. Restarting in 3s..." >> logs/Fail_log.txt
+  sleep 3
+done
+SH
+chmod +x run_forever.sh
+
+# 🔟 Auto test script (all events)
+cat <<'EOL' > test_all_events.py
+import time
+from main import send_message
+
+events = [
+    "🔒 Device Security Alert!",
+    "📍 Location request received.",
+    "⚡ Power disconnected!",
+    "🔋 Power connected!",
+    "📶 SIM card changed!",
+    "🚨 Unauthorized access detected!",
+    "✅ Task completed successfully.",
+    "❌ Task fail
