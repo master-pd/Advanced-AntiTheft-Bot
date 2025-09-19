@@ -1,25 +1,30 @@
 #!/usr/bin/env python3
-# anti_theft_advanced.py
-# Advanced Anti-Theft bot (synchronous; python-telegram-bot v13)
+# anti_theft_advanced_fixed.py
+# Advanced Anti-Theft bot (Termux compatible, python-telegram-bot v13)
 
+import os
+import json
+import subprocess
 import time
 import logging
-import requests
 import threading
-import base64
+import requests
+import math
 from datetime import datetime
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from telegram import ParseMode
-from cryptography.fernet import Fernet
 
-# --------- Load config ---------
+# ---------- CONFIG ----------
 CFG_FILE = os.path.expanduser("~/Advanced-AntiTheft-Bot/config.json")
 if not os.path.exists(CFG_FILE):
-    # try local
     CFG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 
-with open(CFG_FILE, 'r') as f:
-    cfg = json.load(f)
+try:
+    with open(CFG_FILE, 'r') as f:
+        cfg = json.load(f)
+except Exception as e:
+    print(f"Config load failed: {e}")
+    cfg = {}
 
 BOT_TOKEN = cfg.get('bot_token')
 PASSWORD = cfg.get('password')
@@ -30,13 +35,17 @@ AUTO_UPDATE = bool(cfg.get('auto_update_github', False))
 GITHUB_REPO = cfg.get('github_repo')
 CLOUD_BACKUP = bool(cfg.get('cloud_backup', False))
 
-# paths
-STORE_FILE = os.path.expanduser('~/Advanced-AntiTheft-Bot/store.json')
-LOGFILE = os.path.expanduser('~/Advanced-AntiTheft-Bot/anti_theft.log')
-ASSETS_DIR = os.path.expanduser('~/Advanced-AntiTheft-Bot/assets')
+# ---------- Paths ----------
+BASE_DIR = os.path.expanduser('~/Advanced-AntiTheft-Bot')
+STORE_FILE = os.path.join(BASE_DIR, 'store.json')
+LOGFILE = os.path.join(BASE_DIR, 'anti_theft.log')
+ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 ALARM_FILE = os.path.join(ASSETS_DIR, 'alarm.mp3')
+PHOTO_FILE = os.path.join(BASE_DIR, 'last_photo.jpg')
 
-# ---------- Logger ----------
+os.makedirs(ASSETS_DIR, exist_ok=True)
+
+# ---------- Logging ----------
 logger = logging.getLogger('anti_theft')
 logger.setLevel(logging.DEBUG)
 fh = logging.FileHandler(LOGFILE)
@@ -73,19 +82,19 @@ def load_store():
         logger.exception('load_store failed')
     return {}
 
-# ---------- Termux helpers ----------
+# ---------- Termux Helpers ----------
 def termux_battery():
     out = run_cmd('termux-battery-status')
     try:
         return json.loads(out)
-    except Exception:
+    except:
         return {'raw': out}
 
 def termux_location():
     out = run_cmd('termux-location -p gps,network -r 5')
     try:
         return json.loads(out)
-    except Exception:
+    except:
         return {'raw': out}
 
 def termux_play_alarm():
@@ -97,35 +106,34 @@ def termux_play_alarm():
 def termux_take_photo(out_path, camera=0):
     return run_cmd(f'termux-camera-photo -c {camera} {out_path}', timeout=25)
 
-# ---------- Auth ----------
+def termux_get_sim_serial():
+    return run_cmd('getprop gsm.sim.operator.alpha || getprop ril.serialnumber')
+
+# ---------- Authentication ----------
 def check_auth(update, args):
     chat_id = update.effective_chat.id
     if ADMIN_CHAT_ID is not None:
         try:
             if int(chat_id) != int(ADMIN_CHAT_ID):
                 return False, 'Access denied.'
-        except Exception:
+        except:
             return False, 'Access denied.'
     if not args or args[0] != PASSWORD:
         return False, 'Wrong or missing password.'
     return True, ''
 
-# ---------- Utility features ----------
-import math
-
+# ---------- Utility ----------
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000
     phi1 = math.radians(lat1)
     phi2 = math.radians(lat2)
-    dphi = math.radians(lat2-lat1)
-    dl = math.radians(lon2-lon1)
+    dphi = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
     a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dl/2)**2
-    c = 2*math.atan2(math.sqrt(a), math.sqrt(1-a))
-    return R*c
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * c
 
 # ---------- Commands ----------
-from telegram import ParseMode
-
 def cmd_start(update, context):
     update.message.reply_text('Anti-Theft bot active. Use /help')
 
@@ -136,11 +144,14 @@ def cmd_help(update, context):
 
 def cmd_status(update, context):
     ok, reason = check_auth(update, context.args)
-    if not ok:
+    if not ok: 
         update.message.reply_text(reason)
         return
     batt = termux_battery()
-    ip = requests.get('https://api.ipify.org').text if True else 'N/A'
+    try:
+        ip = requests.get('https://api.ipify.org', timeout=5).text
+    except:
+        ip = 'N/A'
     model = run_cmd('getprop ro.product.model')
     android_ver = run_cmd('getprop ro.build.version.release')
     text = (
@@ -153,10 +164,13 @@ def cmd_status(update, context):
 def cmd_loc(update, context):
     ok, reason = check_auth(update, context.args)
     if not ok:
-        update.message.reply_text(reason); return
+        update.message.reply_text(reason)
+        return
     loc = termux_location()
     if isinstance(loc, dict) and loc.get('latitude'):
-        lat = loc.get('latitude'); lon = loc.get('longitude'); acc = loc.get('accuracy','N/A')
+        lat = loc.get('latitude')
+        lon = loc.get('longitude')
+        acc = loc.get('accuracy', 'N/A')
         maps = f'https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=18/{lat}/{lon}'
         update.message.reply_text(f'Lat:`{lat}`\nLon:`{lon}`\nAcc:`{acc}`\n{maps}', parse_mode=ParseMode.MARKDOWN)
     else:
@@ -165,45 +179,50 @@ def cmd_loc(update, context):
 def cmd_alarm(update, context):
     ok, reason = check_auth(update, context.args)
     if not ok:
-        update.message.reply_text(reason); return
+        update.message.reply_text(reason)
+        return
     update.message.reply_text('Alarm triggered.')
     termux_play_alarm()
 
 def cmd_lock(update, context):
     ok, reason = check_auth(update, context.args)
     if not ok:
-        update.message.reply_text(reason); return
+        update.message.reply_text(reason)
+        return
     out = run_cmd('input keyevent 26')
     update.message.reply_text(f'Lock attempted. result:`{out}`', parse_mode=ParseMode.MARKDOWN)
 
 def cmd_photo(update, context):
     ok, reason = check_auth(update, context.args)
     if not ok:
-        update.message.reply_text(reason); return
+        update.message.reply_text(reason)
+        return
     camera = 0
     if len(context.args) >= 2 and context.args[1].lower().startswith('back'):
         camera = 1
-    out_path = os.path.expanduser('~/Advanced-AntiTheft-Bot/last_photo.jpg')
     update.message.reply_text('Taking photo (may prompt permission)...')
-    res = termux_take_photo(out_path, camera=camera)
-    if os.path.exists(out_path):
+    termux_take_photo(PHOTO_FILE, camera=camera)
+    if os.path.exists(PHOTO_FILE):
         try:
-            context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(out_path,'rb'))
+            with open(PHOTO_FILE, 'rb') as f:
+                context.bot.send_photo(chat_id=update.effective_chat.id, photo=f)
             update.message.reply_text('Photo sent.')
         except Exception as e:
             update.message.reply_text(f'Error sending photo: {e}')
     else:
-        update.message.reply_text(f'Photo capture failed: {res}')
+        update.message.reply_text('Photo capture failed.')
 
 def cmd_sethome(update, context):
     ok, reason = check_auth(update, context.args)
     if not ok:
-        update.message.reply_text(reason); return
+        update.message.reply_text(reason)
+        return
     if len(context.args) < 3:
         update.message.reply_text('Usage: /sethome <password> <lat> <lon>')
         return
     try:
-        lat = float(context.args[1]); lon = float(context.args[2])
+        lat = float(context.args[1])
+        lon = float(context.args[2])
         store = load_store()
         store['home'] = {'lat': lat, 'lon': lon, 'radius': GEOFENCE_RADIUS_M}
         save_store(store)
@@ -214,13 +233,17 @@ def cmd_sethome(update, context):
 def cmd_geostatus(update, context):
     ok, reason = check_auth(update, context.args)
     if not ok:
-        update.message.reply_text(reason); return
-    store = load_store(); home = store.get('home')
+        update.message.reply_text(reason)
+        return
+    store = load_store()
+    home = store.get('home')
     if not home:
-        update.message.reply_text('Home not set. Use /sethome'); return
+        update.message.reply_text('Home not set. Use /sethome')
+        return
     loc = termux_location()
     if isinstance(loc, dict) and loc.get('latitude'):
-        lat=loc.get('latitude'); lon=loc.get('longitude')
+        lat = loc.get('latitude')
+        lon = loc.get('longitude')
         d = haversine(lat, lon, home['lat'], home['lon'])
         inside = d <= home.get('radius', GEOFENCE_RADIUS_M)
         update.message.reply_text(f'Distance to home: {int(d)} m. Inside: {inside}')
@@ -230,16 +253,17 @@ def cmd_geostatus(update, context):
 def cmd_ping(update, context):
     ok, reason = check_auth(update, context.args)
     if not ok:
-        update.message.reply_text(reason); return
+        update.message.reply_text(reason)
+        return
     update.message.reply_text('PONG')
 
 def cmd_store(update, context):
-    if ADMIN_CHAT_ID is not None and int(update.effective_chat.id)!=int(ADMIN_CHAT_ID):
+    if ADMIN_CHAT_ID and int(update.effective_chat.id) != int(ADMIN_CHAT_ID):
         return
-    store = load_store(); update.message.reply_text(f"Store: `{json.dumps(store)[:1200]}`", parse_mode=ParseMode.MARKDOWN)
+    store = load_store()
+    update.message.reply_text(f"Store: `{json.dumps(store)[:1200]}`", parse_mode=ParseMode.MARKDOWN)
 
-# ---------- Heartbeat thread ----------
-
+# ---------- Heartbeat ----------
 def heartbeat_loop(updater):
     if HEARTBEAT_MIN <= 0:
         logger.info('Heartbeat disabled')
@@ -247,19 +271,24 @@ def heartbeat_loop(updater):
     bot = updater.bot
     while True:
         try:
-            store = load_store(); admin = ADMIN_CHAT_ID
-            if admin:
-                batt = termux_battery(); ip = requests.get('https://api.ipify.org').text
+            store = load_store()
+            if ADMIN_CHAT_ID:
+                batt = termux_battery()
+                try:
+                    ip = requests.get('https://api.ipify.org', timeout=5).text
+                except:
+                    ip = 'N/A'
                 msg = f"[HEARTBEAT]\nTime: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\nBattery: {batt.get('percentage','N/A')}%\nIP: {ip}"
-                bot.send_message(chat_id=admin, text=msg)
+                bot.send_message(chat_id=ADMIN_CHAT_ID, text=msg)
                 home = store.get('home')
                 if home:
                     loc = termux_location()
                     if isinstance(loc, dict) and loc.get('latitude'):
-                        lat=loc.get('latitude'); lon=loc.get('longitude')
+                        lat = loc.get('latitude')
+                        lon = loc.get('longitude')
                         d = haversine(lat, lon, home['lat'], home['lon'])
                         if d > home.get('radius', GEOFENCE_RADIUS_M):
-                            bot.send_message(chat_id=admin, text=f"[GEO ALERT] Device is {int(d)}m away from home center.")
+                            bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"[GEO ALERT] Device is {int(d)}m away from home center.")
             else:
                 logger.debug('Heartbeat: no ADMIN_CHAT_ID set.')
         except Exception:
@@ -267,27 +296,24 @@ def heartbeat_loop(updater):
         time.sleep(HEARTBEAT_MIN * 60)
 
 # ---------- SIM check ----------
-def termux_get_sim_serial():
-    return run_cmd('getprop gsm.sim.operator.alpha || getprop ril.serialnumber')
-
 def check_sim_change(updater):
     try:
-        current = termux_get_sim_serial(); store = load_store(); last = store.get('sim_serial')
-        if last and last != current:
-            admin = ADMIN_CHAT_ID
-            if admin:
-                updater.bot.send_message(chat_id=admin, text=f"[SIM CHANGE] previous: `{last}` new: `{current}`")
-        store['sim_serial'] = current; save_store(store)
+        current = termux_get_sim_serial()
+        store = load_store()
+        last = store.get('sim_serial')
+        if last and last != current and ADMIN_CHAT_ID:
+            updater.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"[SIM CHANGE] previous: `{last}` new: `{current}`")
+        store['sim_serial'] = current
+        save_store(store)
     except Exception:
         logger.exception('SIM check failed')
 
-# ---------- Auto-update (safe) ----------
+# ---------- Auto-update ----------
 def auto_update_from_github():
     if not AUTO_UPDATE or not GITHUB_REPO:
         return
     try:
-        # do a git pull in repo dir if exists
-        repo_dir = os.path.expanduser('~/Advanced-AntiTheft-Bot')
+        repo_dir = BASE_DIR
         if os.path.exists(repo_dir) and os.path.isdir(repo_dir):
             out = run_cmd(f'cd {repo_dir} && git pull')
             logger.info(f'Auto-update: {out}')
@@ -299,6 +325,7 @@ def main():
     if not BOT_TOKEN or BOT_TOKEN.startswith('PUT_YOUR'):
         print('Please edit config.json with BOT_TOKEN and PASSWORD')
         return
+
     updater = Updater(BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
 
@@ -319,18 +346,15 @@ def main():
     updater.start_polling()
     logger.info('Bot started')
 
-    # sim check
     try:
         check_sim_change(updater)
     except Exception:
         logger.exception('SIM check exception')
 
-    # heartbeat
     if HEARTBEAT_MIN > 0 and ADMIN_CHAT_ID:
         t = threading.Thread(target=heartbeat_loop, args=(updater,), daemon=True)
         t.start()
 
-    # auto-update once at start
     threading.Thread(target=auto_update_from_github, daemon=True).start()
 
     updater.idle()
