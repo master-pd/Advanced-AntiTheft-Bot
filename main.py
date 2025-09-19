@@ -44,6 +44,7 @@ ALARM_FILE = os.path.join(ASSETS_DIR, 'alarm.mp3')
 PHOTO_FILE = os.path.join(BASE_DIR, 'last_photo.jpg')
 
 os.makedirs(ASSETS_DIR, exist_ok=True)
+os.makedirs(BASE_DIR, exist_ok=True)
 
 # ---------- Logging ----------
 logger = logging.getLogger('anti_theft')
@@ -118,6 +119,9 @@ def check_auth(update, args):
                 return False, 'Access denied.'
         except:
             return False, 'Access denied.'
+    # If password is empty in config, skip password check (admin-only access still enforced)
+    if not PASSWORD:
+        return True, ''
     if not args or args[0] != PASSWORD:
         return False, 'Wrong or missing password.'
     return True, ''
@@ -144,7 +148,7 @@ def cmd_help(update, context):
 
 def cmd_status(update, context):
     ok, reason = check_auth(update, context.args)
-    if not ok: 
+    if not ok:
         update.message.reply_text(reason)
         return
     batt = termux_battery()
