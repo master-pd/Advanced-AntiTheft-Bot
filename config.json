@@ -1,6 +1,6 @@
 {
   "bot_token": "7620754730:AAEzW3ci5sxHD65E5yqJ0yqVKoZ1SJCn4Ho",
-  "password": "1234",
+  "password": "abcd1234",
   "admin_chat_id": 6454347745,
   "heartbeat_min": 30,
   "geofence_radius_m": 200,
